@@ -200,8 +200,10 @@ if __name__ == "__main__":
         g.setlaser(100)
         time.sleep(100)
     else:
-        for path in get_polylines_from_hpgl('shapes.hpgl', 500):
-            draw_line(g, np.array(path)/2, 2, 50, 2)
+        for path in get_polylines_from_hpgl('shapes_for_loren.hpgl', 500):
+            draw_line(g, path, 1, 50, 2)
         
         g.move_global([0,0], 1)
-    
+        # I = Image.open('totoro.jpg')
+        # print(I.histogram)
+        # print('hello')
