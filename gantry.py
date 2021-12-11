@@ -205,5 +205,5 @@ if __name__ == "__main__":
         
         g.move_global([0,0], 1)
         # I = Image.open('totoro.jpg')
-        # print(I.histogram)
-        # print('hello')
+        # print(len(np.asarray(I.convert('L'))),:)
+        
