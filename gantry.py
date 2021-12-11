@@ -116,7 +116,7 @@ def cart2pol(cart):
 def pol2cart(pol):
     return [pol[0] * np.cos(pol[1]), pol[0] * np.sin(pol[1])]
 
-class gantry:
+class Gantry:
     def __init__(self):
         self.setup_pi()
 
@@ -192,18 +192,31 @@ class gantry:
             self.X = target[0]
             self.Y = target[1]
 
+class ToolImage:
+    def __init__(self, filename):
+        self.I = np.asarray(Image.open(filename).convert('L'))
+    
+    def gen_points(self, n):
+        prob_matrix = (255-self.I)/255
+        # ones = np.random.choice(1,p=prob_matrix)
+        print(np.random.choice(3,3,p=[.5, .25, .25]))
+
+
+
 if __name__ == "__main__":
-    g = gantry()
+    g = Gantry()
+    I = ToolImage('totoro.jpg')
     just_laser = False
 
-    if just_laser:
-        g.setlaser(100)
-        time.sleep(100)
-    else:
-        for path in get_polylines_from_hpgl('shapes_for_loren.hpgl', 500):
-            draw_line(g, path, 1, 50, 2)
+    I.gen_points(10)
+
+    # if just_laser:
+    #     g.setlaser(100)
+    #     time.sleep(100)
+    # else:
+    #     for path in get_polylines_from_hpgl('addendum.hpgl', 500):
+    #         draw_line(g, path, 1, 50, 2)
         
-        g.move_global([0,0], 1)
-        # I = Image.open('totoro.jpg')
-        # print(len(np.asarray(I.convert('L'))),:)
+    #     g.move_global([0,0], 1)
+        
         
