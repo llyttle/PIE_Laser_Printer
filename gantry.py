@@ -211,7 +211,7 @@ def MasterPath(G, polyline, sz, I):
     for line in polyline:
         for point in line:
             p = np.array(point) * sz/I.span()
-            a = I.I[round(p[0])-1][round(p[1])-1]
+            # a = I.I[round(p[0])-1][round(p[1])-1]
             G.move_global(p, .5)
             G.setlaser(100)
         G.setlaser(0)
@@ -302,10 +302,18 @@ if __name__ == "__main__":
         # while 1:
         #     pass
 
-        # T = ToolFile('cad_graphics.hpgl')
-        T = ToolFile('print1.hpgl')
+        T = ToolFile('max_tshirt_line.hpgl')
 
-        speed_draw = 0.5  # in/s
+        speed_draw = 1  # in/s
+        speed_jump = 1  # in/s
+        power_level = 100 # percent power
+        draw_hpgl(G, T, speed_draw, speed_jump, power_level)
+
+        time.sleep(10)
+
+        T = ToolFile('max_tshirt_sound.hpgl')
+
+        speed_draw = 0.2  # in/s
         speed_jump = 3  # in/s
         power_level = 100 # percent power
         draw_hpgl(G, T, speed_draw, speed_jump, power_level)
