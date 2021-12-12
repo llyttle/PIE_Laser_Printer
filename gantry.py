@@ -56,7 +56,7 @@ class Gantry:
             GPIO.output(pin, 1)
 
     def setlaser(self, duty):
-        self.laserpwm.start(duty)
+        self.laserpwm.start(duty) #provide duty cycle in the range 0-100
 
     def move(self, x, y, sps):
         """Function moves gantry x, y steps at 'sps' Steps Per Second"""
@@ -99,10 +99,11 @@ class Gantry:
 class ToolFile:
     def __init__(self, filename, res=500):
         filestat = filename.split('.')
+        self.filename = filename
         if filestat[-1] == 'hpgl':
             print('Recognized '+filestat[0]+' as .'+filestat[-1])
             self.I = np.ones((200,200))
-            self.path = self.get_polylines_from_hpgl(filename, 500)
+            self.path = self.get_polylines_from_hpgl(500)
 
         elif filestat[-1] == 'jpg':
             print('Recognized '+filestat[0]+' as .'+filestat[-1])
@@ -154,9 +155,9 @@ class ToolFile:
         return [self.get_polyline(polyline_string, dpi) for polyline_string in \
                                                     polyline_strings]
 
-    def get_polylines_from_hpgl(self, filepath, dpi):
+    def get_polylines_from_hpgl(self, dpi):
         """Generates and returns a list of polylines from an hpgl file"""
-        with open(filepath, "r") as file:
+        with open(self.filename, "r") as file:
             # read the one-liner hpgl file into a string
             lines = file.readlines()
             # create list of lines in the hpgl file
@@ -214,6 +215,37 @@ def MasterPath(G, polyline, sz, I):
             G.move_global(p, .5)
             G.setlaser(100)
         G.setlaser(0)
+
+def draw_hpgl(G, T, speed_draw, speed_jump, power):
+    """
+    Commands the gantry to draw the hpgl file located at [filename]
+
+    Args:
+        G (Gantry): the gantry object
+        T (Toolfile): tool file containing the hpgl code
+        speed_draw (float): speed of gantry while drawing in in/sec
+        speed_jump (float): speed of gantry while jumping between 
+                            polylines in in/sec
+    """
+    # get list of polylines
+    polylines = T.get_polylines_from_hpgl(500)
+
+    # # debug
+    # print(polylines)
+
+    # draw each polyline
+    for polyline in polylines:
+        # move to first point
+        G.move_global(polyline[0], speed_jump)
+        # turn laser on
+        G.setlaser(power)
+        # move to rest of points in sequence
+        for point in polyline[1:]:
+            G.move_global(point, speed_draw)
+        # turn off laser
+        G.setlaser(0)
+    # move back to homepoint
+    G.move_global([0,0], speed_jump)
             
 
 def extrap_line(point1, point2, ppi):
@@ -234,8 +266,10 @@ def pol2cart(pol):
 if __name__ == "__main__":
     G = Gantry()
     # T = ToolFile('totoro.jpg', 800) # Import totoro.jpg, populate with n points
-    T = ToolFile('addendum.hpgl')
-    T = ToolFile('shapes.hpgl')
+    # T = ToolFile('addendum.hpgl')
+    # T = ToolFile('shapes.hpgl')
+    
+    # T = ToolFile('mini_square.hpgl')
     # T = ToolFile('square.jpg', 500)
 
     just_laser = False
@@ -244,13 +278,13 @@ if __name__ == "__main__":
         G.setlaser(100)
         time.sleep(100)
     else:
-        P = populatePath(T, ppi=10) # Ensures that all points are spaced out 'ppi' points per inch.
+        # P = populatePath(T, ppi=10) # Ensures that all points are spaced out 'ppi' points per inch.
 
-        print('finished populating')
+        # print('finished populating')
 
-        MasterPath(G, P, 7, T)
+        # MasterPath(G, P, 7, T)
 
-        G.move_global([0,0],2)
+        # G.move_global([0,0],2)
 
 
         # print([m for m in M])
@@ -263,10 +297,19 @@ if __name__ == "__main__":
         #         G.move_global(point, 2)
         #         print(point)
         #     G.setlaser(0)
+
+        # G.setlaser(.5)
+        # while 1:
+        #     pass
+
+        # T = ToolFile('cad_graphics.hpgl')
+        T = ToolFile('print1.hpgl')
+
+        speed_draw = 0.5  # in/s
+        speed_jump = 3  # in/s
+        power_level = 100 # percent power
+        draw_hpgl(G, T, speed_draw, speed_jump, power_level)
     
 
 
     # G.move_global([0,0], 1)
-    
-        
-        
