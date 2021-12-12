@@ -7,18 +7,18 @@ import random
 
 # def setkeypoints():
 #     keypoints = []
-#     # Line
-#     # x = 5
-#     # for y in np.linspace(3,-3,10):
-#     #     keypoints.append([x,y])
-#     #     x *= -1
+    # Line
+    # x = 5
+    # for y in np.linspace(3,-3,10):
+    #     keypoints.append([x,y])
+    #     x *= -1
 
-#     # Circle
-#     r = 3
-#     for theta in range(360):
-#             rad = math.radians(theta)
-#             keypoints.append([r*math.sin(rad), r*math.cos(rad)])
-#     return keypoints
+    # Circle
+    # r = 3
+    # for theta in range(360):
+    #         rad = math.radians(theta)
+    #         keypoints.append([r*math.sin(rad), r*math.cos(rad)])
+    # return keypoints
 
 class Gantry:
     def __init__(self):
@@ -101,7 +101,7 @@ class ToolFile:
         filestat = filename.split('.')
         if filestat[-1] == 'hpgl':
             print('Recognized '+filestat[0]+' as .'+filestat[-1])
-            self.I = None
+            self.I = np.ones((200,200))
             self.path = self.get_polylines_from_hpgl(filename, 500)
 
         elif filestat[-1] == 'jpg':
@@ -194,40 +194,36 @@ class ToolFile:
         random.shuffle(keys)
         return keys
 
-def MasterPath(G, T, sz, ppi):
-    MP = []
+def populatePath(T, ppi):
+    PP = []
     for line in T.path:
         refined_line = []
         last_point = np.array(line[0])
         for point in line[1:]:
-            point = np.array(point)
-            # if not point[0]==last_point[0]:
-            [refined_line.append(new_p) for new_p in extrap_line(last_point, point, ppi)]
+            [refined_line.append(new_p) for new_p in extrap_line(last_point, np.array(point), ppi)]
             last_point = point
-        MP.append(refined_line)
+        PP.append(refined_line)
 
+    return PP
 
-    return MP
-
-# def draw_line(g, keys, speed, power, ppi, scalar):
-#     g.move_global(keys[0], 3)
-#     last_point = keys[0]
-
-#     g.setlaser(power)
-#     for point in keys[1:]:
-#         for step in extrap_line(np.array(last_point), np.array(point), ppi):
-#             g.move_global(step, speed)
-#         last_point = point
-#     g.setlaser(0)
+def MasterPath(G, polyline, sz, I):
+    for line in polyline:
+        for point in line:
+            p = np.array(point) * sz/I.span()
+            a = I.I[round(p[0])-1][round(p[1])-1]
+            G.move_global(p, .5)
+            G.setlaser(100)
+        G.setlaser(0)
+            
 
 def extrap_line(point1, point2, ppi):
     """Function extrapolates points in a line between two points with 'ppi' points per inch"""
     pol = cart2pol(point2-point1)
     vector_lengths = np.linspace(0, pol[0], math.ceil(pol[0]*ppi))
 
-    line = [pol2cart([rho,pol[1]]) for rho in vector_lengths]
-
-    return line+point1
+    line = [pol2cart([rho,pol[1]])+point1 for rho in vector_lengths]
+    
+    return line
 
 def cart2pol(cart):
     return np.array([np.sqrt(cart[0]**2 + cart[1]**2), np.arctan2(cart[1], cart[0])])
@@ -235,42 +231,42 @@ def cart2pol(cart):
 def pol2cart(pol):
     return np.array([pol[0] * np.cos(pol[1]), pol[0] * np.sin(pol[1])])
 
-
 if __name__ == "__main__":
     G = Gantry()
-    T = ToolFile('totoro.jpg', 100) # Import totoro.jpg, populate with n points
-    # T = ToolFile('addendum.hpgl')
+    # T = ToolFile('totoro.jpg', 800) # Import totoro.jpg, populate with n points
+    T = ToolFile('addendum.hpgl')
+    T = ToolFile('shapes.hpgl')
     # T = ToolFile('square.jpg', 500)
 
-    M = MasterPath(G, T, sz=3, ppi=10)
-    print(len(T.path), len(M))
+    just_laser = False
 
-    # G.move_global([0,0],1)
-
-    # print('Toolpath Created, printing in 5 seconds...')
-    # time.sleep(5)
-    
-    for Line in M:
-        G.move_global(Line[0], 3)
-
+    if just_laser:
         G.setlaser(100)
-        for point in Line[1:]:
-            G.move_global(point, 2)
-            print(point)
-        G.setlaser(0)
+        time.sleep(100)
+    else:
+        P = populatePath(T, ppi=10) # Ensures that all points are spaced out 'ppi' points per inch.
 
-    G.move_global([0,0], 1)
+        print('finished populating')
+
+        MasterPath(G, P, 7, T)
+
+        G.move_global([0,0],2)
 
 
-    # just_laser = True
-
-    # if just_laser:
-    #     G.setlaser(100)
-    #     time.sleep(100)
-    # else:
-    #     for path in :
-    #         draw_line(g, path, 1, 50, 2)
+        # print([m for m in M])
         
-    #     g.move_global([0,0], 1)
+        # for Line in M:
+        #     G.move_global(Line[0], 3)
+
+        #     G.setlaser(100)
+        #     for point in Line[1:]:
+        #         G.move_global(point, 2)
+        #         print(point)
+        #     G.setlaser(0)
+    
+
+
+    # G.move_global([0,0], 1)
+    
         
         
