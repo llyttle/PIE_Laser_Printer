@@ -3,6 +3,7 @@ import time
 import math
 import numpy as np
 from PIL import Image
+import random
 
 # def setkeypoints():
 #     keypoints = []
@@ -100,6 +101,7 @@ class ToolFile:
         filestat = filename.split('.')
         if filestat[-1] == 'hpgl':
             print('Recognized '+filestat[0]+' as .'+filestat[-1])
+            self.I = None
             self.path = self.get_polylines_from_hpgl(filename, 500)
 
         elif filestat[-1] == 'jpg':
@@ -107,6 +109,7 @@ class ToolFile:
             gray = Image.open(filename).convert('L')
             resized = gray.resize((200,200))
             self.I = np.asarray(resized)
+            self.I = (255-self.I)/255  # Inverse light/dark, normalize over 255
 
             self.path = [self.gen_keypoints(res)]
 
@@ -123,6 +126,16 @@ class ToolFile:
             extreme_points.append(np.min(line,0))
         
         return max(np.ptp(np.array(extreme_points),axis=0))
+    
+    def MapPoint(self, point, sz):
+        file2bed_scalar = sz/self.span()
+        if self.I is not None:
+            x = point[0]+np.size(self.I,0)/2
+            y = point[1]+np.size(self.I,1)/2
+            a = self.I[round(x)-1][round(y)-1]
+            return [point[0]*file2bed_scalar, point[1]*file2bed_scalar, a]
+        else:
+            return [point[0]*file2bed_scalar, point[1]*file2bed_scalar, 1]
         
     def get_polyline(self, polyline_string, dpi):
         """Returns a polyline (list of coordinates with each coordinate being a list of
@@ -167,9 +180,8 @@ class ToolFile:
             return self.get_multiple_polylines(unsorted_polylines, dpi)
 
     def gen_keypoints(self, n):
-        prob_matrix = (255-self.I)/255  # Inverse light/dark, normalize over 255
-        norm = n/np.sum(prob_matrix)    # Scalar that maps from each pixel summing to 1 to entire array summing to n
-        prob_matrix *= norm
+        norm = n/np.sum(self.I)    # Scalar that maps from each pixel summing to 1 to entire array summing to n
+        prob_matrix = norm*self.I
 
         sz = len(prob_matrix)
         r = np.random.random((sz,sz))   # Random number matrix reference
@@ -179,64 +191,81 @@ class ToolFile:
             for x,point in enumerate(row):
                 if point:
                     keys.append([x-(sz/2),(sz/2)-y])    # while appending, center points on 0,0 and flip y
-        
+        random.shuffle(keys)
         return keys
 
 def MasterPath(G, T, sz, ppi):
-    file2bed_scalar = sz/T.span()
-    scaled_path = np.array(T.path) * file2bed_scalar
-    
     MP = []
-    for line in scaled_path:
-        last_point = line[0]
+    for line in T.path:
+        refined_line = []
+        last_point = np.array(line[0])
         for point in line[1:]:
-            MP.append(extrap_line(last_point, point, ppi))
-    
+            point = np.array(point)
+            # if not point[0]==last_point[0]:
+            [refined_line.append(new_p) for new_p in extrap_line(last_point, point, ppi)]
+            last_point = point
+        MP.append(refined_line)
 
-    
-    # we want to return a (x,y,amplitude)
-    #   (in,in,%)
 
-def draw_line(g, keys, speed, power, ppi, scalar):
-    g.move_global(keys[0], 3)
-    last_point = keys[0]
+    return MP
 
-    g.setlaser(power)
-    for point in keys[1:]:
-        for step in extrap_line(np.array(last_point), np.array(point), ppi):
-            g.move_global(step, speed)
-        last_point = point
-    g.setlaser(0)
+# def draw_line(g, keys, speed, power, ppi, scalar):
+#     g.move_global(keys[0], 3)
+#     last_point = keys[0]
+
+#     g.setlaser(power)
+#     for point in keys[1:]:
+#         for step in extrap_line(np.array(last_point), np.array(point), ppi):
+#             g.move_global(step, speed)
+#         last_point = point
+#     g.setlaser(0)
 
 def extrap_line(point1, point2, ppi):
     """Function extrapolates points in a line between two points with 'ppi' points per inch"""
     pol = cart2pol(point2-point1)
     vector_lengths = np.linspace(0, pol[0], math.ceil(pol[0]*ppi))
-    line = []
-    for rho in vector_lengths:
-        line.append(pol2cart([rho, pol[1]]))
+
+    line = [pol2cart([rho,pol[1]]) for rho in vector_lengths]
+
     return line+point1
 
 def cart2pol(cart):
-    return [np.sqrt(cart[0]**2 + cart[1]**2), np.arctan2(cart[1], cart[0])]
+    return np.array([np.sqrt(cart[0]**2 + cart[1]**2), np.arctan2(cart[1], cart[0])])
 
 def pol2cart(pol):
-    return [pol[0] * np.cos(pol[1]), pol[0] * np.sin(pol[1])]
+    return np.array([pol[0] * np.cos(pol[1]), pol[0] * np.sin(pol[1])])
 
 
 if __name__ == "__main__":
     G = Gantry()
-    # T = ToolFile('totoro.jpg', 1000) # Import totoro.jpg, populate with n points
-    T = ToolFile('addendum.hpgl')
+    T = ToolFile('totoro.jpg', 100) # Import totoro.jpg, populate with n points
+    # T = ToolFile('addendum.hpgl')
+    # T = ToolFile('square.jpg', 500)
 
-    print(T.span())
+    M = MasterPath(G, T, sz=3, ppi=10)
+    print(len(T.path), len(M))
+
+    # G.move_global([0,0],1)
+
+    # print('Toolpath Created, printing in 5 seconds...')
+    # time.sleep(5)
+    
+    for Line in M:
+        G.move_global(Line[0], 3)
+
+        G.setlaser(100)
+        for point in Line[1:]:
+            G.move_global(point, 2)
+            print(point)
+        G.setlaser(0)
+
+    G.move_global([0,0], 1)
 
 
-    just_laser = False
-    # print(I.keys)
+    # just_laser = True
 
     # if just_laser:
-    #     g.setlaser(100)
+    #     G.setlaser(100)
     #     time.sleep(100)
     # else:
     #     for path in :
