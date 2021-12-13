@@ -185,13 +185,11 @@ class ToolImage:
     
     def MapPoint(self, sz):
         f2b = sz/self.span() #file to bed dimension scalar
-        for point in self.path:
-            print(np.asarray((np.shape(self.I)))/2)
-            point += np.shape(self.I)/2
-            # point[0] = (point[0]+np.size(self.I,0)/2)*f2b
-            # point[1] = (point[1]+np.size(self.I,1)/2)*f2b
-
-            point.append(a = self.I[round(point[0])-1][round(point[1])-1])
+        for i, point in enumerate(self.path):
+            a = self.I[round(point[0])][round(point[1])]
+            point -= np.asarray((np.shape(self.I)))/2
+            point *= f2b
+            self.path[i] = np.append(point, a)
 
     def populatePath(self):
         self.path = []
@@ -253,8 +251,9 @@ def DrawToolpath(G, P, speed, power):
         for point in line:
         #     p = np.array(point) * sz/I.span()
         #     # a = I.I[round(p[0])-1][round(p[1])-1]
-            G.setlaser(power)
-            G.move_global(point, .5)
+            print(point)
+            G.setlaser(point[2])
+            G.move_global([point[0], point[1]], 1)
         #     G.setlaser(100)
         G.setlaser(0)
     G.move_global([0,0],2)
@@ -266,7 +265,7 @@ if __name__ == "__main__":
     # T = ToolVector('shapes.hpgl')
     
     # T = ToolFile('mini_square.hpgl')
-    T = ToolImage('square.jpg', 100)
+    T = ToolImage('gradient.jpg', 100)
 
     just_laser = 0
 
@@ -275,5 +274,5 @@ if __name__ == "__main__":
         while 1:
             pass
     else:
-        print(T.polyline[0])
-        # DrawToolpath(G, T, 1, 10)
+        # print(T.polyline[0])
+        DrawToolpath(G, T, 1, 10)
