@@ -96,48 +96,15 @@ class Gantry:
             self.X = target[0]
             self.Y = target[1]
 
-class ToolFile:
-    def __init__(self, filename, res=500):
+class ToolVector:
+    def __init__(self, filename):
         filestat = filename.split('.')
-        self.filename = filename
         if filestat[-1] == 'hpgl':
             print('Recognized '+filestat[0]+' as .'+filestat[-1])
-            self.I = np.ones((200,200))
             self.path = self.get_polylines_from_hpgl(500)
-
-        elif filestat[-1] == 'jpg':
-            print('Recognized '+filestat[0]+' as .'+filestat[-1])
-            gray = Image.open(filename).convert('L')
-            resized = gray.resize((200,200))
-            self.I = np.asarray(resized)
-            self.I = (255-self.I)/255  # Inverse light/dark, normalize over 255
-
-            self.path = [self.gen_keypoints(res)]
-
         else:
             raise AttributeError('Cannot read .'+filestat[-1]+' files')
-    
-    def path_count(self):
-        return len(self.path)
-    
-    def span(self):
-        extreme_points = []
-        for line in self.path:
-            extreme_points.append(np.max(line,0))
-            extreme_points.append(np.min(line,0))
-        
-        return max(np.ptp(np.array(extreme_points),axis=0))
-    
-    def MapPoint(self, point, sz):
-        file2bed_scalar = sz/self.span()
-        if self.I is not None:
-            x = point[0]+np.size(self.I,0)/2
-            y = point[1]+np.size(self.I,1)/2
-            a = self.I[round(x)-1][round(y)-1]
-            return [point[0]*file2bed_scalar, point[1]*file2bed_scalar, a]
-        else:
-            return [point[0]*file2bed_scalar, point[1]*file2bed_scalar, 1]
-        
+
     def get_polyline(self, polyline_string, dpi):
         """Returns a polyline (list of coordinates with each coordinate being a list of
         [x,y]) from a string in "x1,y1,x2,y2,..." form"""
@@ -180,6 +147,39 @@ class ToolFile:
 
             return self.get_multiple_polylines(unsorted_polylines, dpi)
 
+class ToolImage:
+    def __init__(self, filename, res=500):
+        filestat = filename.split('.')
+        self.filename = filename
+        if filestat[-1] == 'jpg':
+            print('Recognized '+filestat[0]+' as .'+filestat[-1])
+            
+            gray = Image.open(filename).convert('L')
+            resized = gray.resize((200,200))
+            self.I = np.asarray(resized)
+            self.I = (255-self.I)/255  # Inverse light/dark, normalize over 255
+
+            self.gen_keypoints(res)
+            print('Generated Keypoints')
+            self.populatePath()
+            print('Populated Path')
+
+            self.path = [self.path]
+
+        else:
+            raise AttributeError('Cannot read .'+filestat[-1]+' files')
+    
+    def path_count(self):
+        return len(self.path)
+    
+    def span(self):
+        extreme_points = []
+        for line in self.path:
+            extreme_points.append(np.max(line,0))
+            extreme_points.append(np.min(line,0))
+        
+        return max(np.ptp(np.array(extreme_points),axis=0))
+
     def gen_keypoints(self, n):
         norm = n/np.sum(self.I)    # Scalar that maps from each pixel summing to 1 to entire array summing to n
         prob_matrix = norm*self.I
@@ -187,25 +187,43 @@ class ToolFile:
         sz = len(prob_matrix)
         r = np.random.random((sz,sz))   # Random number matrix reference
 
-        keys = []
+        self.keys = []
         for y,row in enumerate(r<prob_matrix):
             for x,point in enumerate(row):
                 if point:
-                    keys.append([x-(sz/2),(sz/2)-y])    # while appending, center points on 0,0 and flip y
-        random.shuffle(keys)
-        return keys
+                    self.keys.append([x-(sz/2),(sz/2)-y])    # while appending, center points on 0,0 and flip y
+        random.shuffle(self.keys)
+    
+    # def MapPoint(self, point, sz):
+    #     file2bed_scalar = sz/self.span()
+    #     if self.I is not None:
+    #         x = point[0]+np.size(self.I,0)/2
+    #         y = point[1]+np.size(self.I,1)/2
+    #         a = self.I[round(x)-1][round(y)-1]
+    #         return [point[0]*file2bed_scalar, point[1]*file2bed_scalar, a]
+    #     else:
+    #         return [point[0]*file2bed_scalar, point[1]*file2bed_scalar, 1]
 
-def populatePath(T, ppi):
-    PP = []
-    for line in T.path:
-        refined_line = []
-        last_point = np.array(line[0])
-        for point in line[1:]:
-            [refined_line.append(new_p) for new_p in extrap_line(last_point, np.array(point), ppi)]
+    def populatePath(self):
+        self.path = []
+        last_point = np.array(self.keys[0])
+        for point in self.keys[1:]:
+            [self.path.append(new_p) for new_p in self.extrap_line(last_point, np.array(point))]
             last_point = point
-        PP.append(refined_line)
+    
+    def extrap_line(self, point1, point2):
+        """Function extrapolates points in a line between two points with 'ppi' points per inch"""
+        pol = self.cart2pol(point2-point1)
+        vector_lengths = list(range(round(pol[0])))
+        line = [self.pol2cart([rho,pol[1]])+point1 for rho in vector_lengths]
+        return line
 
-    return PP
+    def cart2pol(self, cart):
+        return np.array([np.sqrt(cart[0]**2 + cart[1]**2), np.arctan2(cart[1], cart[0])])
+
+    def pol2cart(self, pol):
+        return np.array([pol[0] * np.cos(pol[1]), pol[0] * np.sin(pol[1])])
+
 
 def MasterPath(G, polyline, sz, I):
     for line in polyline:
@@ -246,49 +264,23 @@ def draw_hpgl(G, T, speed_draw, speed_jump, power):
         G.setlaser(0)
     # move back to homepoint
     G.move_global([0,0], speed_jump)
-            
-
-def extrap_line(point1, point2, ppi):
-    """Function extrapolates points in a line between two points with 'ppi' points per inch"""
-    pol = cart2pol(point2-point1)
-    vector_lengths = np.linspace(0, pol[0], math.ceil(pol[0]*ppi))
-
-    line = [pol2cart([rho,pol[1]])+point1 for rho in vector_lengths]
-    
-    return line
-
-def cart2pol(cart):
-    return np.array([np.sqrt(cart[0]**2 + cart[1]**2), np.arctan2(cart[1], cart[0])])
-
-def pol2cart(pol):
-    return np.array([pol[0] * np.cos(pol[1]), pol[0] * np.sin(pol[1])])
 
 if __name__ == "__main__":
     G = Gantry()
-    # T = ToolFile('totoro.jpg', 800) # Import totoro.jpg, populate with n points
-    # T = ToolFile('addendum.hpgl')
-    # T = ToolFile('shapes.hpgl')
+    T = ToolImage('totoro.jpg', res=800) # Import totoro.jpg, populate with n points
+    # T = ToolVector('addendum.hpgl')
+    # T = ToolVector('shapes.hpgl')
     
     # T = ToolFile('mini_square.hpgl')
     # T = ToolFile('square.jpg', 500)
 
-    just_laser = False
+    just_laser = 0
 
     if just_laser:
         G.setlaser(100)
-        time.sleep(100)
-    else:
-        # P = populatePath(T, ppi=10) # Ensures that all points are spaced out 'ppi' points per inch.
-
-        # print('finished populating')
-
-        # MasterPath(G, P, 7, T)
-
-        # G.move_global([0,0],2)
-
-
-        # print([m for m in M])
-        
+        while 1:
+            pass
+    # else:
         # for Line in M:
         #     G.move_global(Line[0], 3)
 
@@ -297,27 +289,3 @@ if __name__ == "__main__":
         #         G.move_global(point, 2)
         #         print(point)
         #     G.setlaser(0)
-
-        # G.setlaser(.5)
-        # while 1:
-        #     pass
-
-        T = ToolFile('max_tshirt_line.hpgl')
-
-        speed_draw = 1  # in/s
-        speed_jump = 1  # in/s
-        power_level = 100 # percent power
-        draw_hpgl(G, T, speed_draw, speed_jump, power_level)
-
-        time.sleep(10)
-
-        T = ToolFile('max_tshirt_sound.hpgl')
-
-        speed_draw = 0.2  # in/s
-        speed_jump = 3  # in/s
-        power_level = 100 # percent power
-        draw_hpgl(G, T, speed_draw, speed_jump, power_level)
-    
-
-
-    # G.move_global([0,0], 1)
