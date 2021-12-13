@@ -5,21 +5,6 @@ import numpy as np
 from PIL import Image
 import random
 
-# def setkeypoints():
-#     keypoints = []
-    # Line
-    # x = 5
-    # for y in np.linspace(3,-3,10):
-    #     keypoints.append([x,y])
-    #     x *= -1
-
-    # Circle
-    # r = 3
-    # for theta in range(360):
-    #         rad = math.radians(theta)
-    #         keypoints.append([r*math.sin(rad), r*math.cos(rad)])
-    # return keypoints
-
 class Gantry:
     def __init__(self):
         self.setup_pi()
@@ -99,11 +84,19 @@ class Gantry:
 class ToolVector:
     def __init__(self, filename):
         filestat = filename.split('.')
+        self.filename = filename
         if filestat[-1] == 'hpgl':
             print('Recognized '+filestat[0]+' as .'+filestat[-1])
-            self.path = self.get_polylines_from_hpgl(500)
+            self.polyline = self.get_polylines_from_hpgl(500)
+            self.formatPolyline()
+            self.type = 'vector'
         else:
             raise AttributeError('Cannot read .'+filestat[-1]+' files')
+
+    def formatPolyline(self):
+        for line in self.polyline:
+            for point in line:
+                point.append(1)
 
     def get_polyline(self, polyline_string, dpi):
         """Returns a polyline (list of coordinates with each coordinate being a list of
@@ -163,9 +156,10 @@ class ToolImage:
             print('Generated Keypoints')
             self.populatePath()
             print('Populated Path')
+            self.MapPoint(3)
 
-            self.path = [self.path]
-
+            self.polyline = [self.path]
+            self.type = 'image'
         else:
             raise AttributeError('Cannot read .'+filestat[-1]+' files')
     
@@ -173,12 +167,7 @@ class ToolImage:
         return len(self.path)
     
     def span(self):
-        extreme_points = []
-        for line in self.path:
-            extreme_points.append(np.max(line,0))
-            extreme_points.append(np.min(line,0))
-        
-        return max(np.ptp(np.array(extreme_points),axis=0))
+        return max(np.ptp(np.array(self.path), axis=0))
 
     def gen_keypoints(self, n):
         norm = n/np.sum(self.I)    # Scalar that maps from each pixel summing to 1 to entire array summing to n
@@ -194,15 +183,15 @@ class ToolImage:
                     self.keys.append([x-(sz/2),(sz/2)-y])    # while appending, center points on 0,0 and flip y
         random.shuffle(self.keys)
     
-    # def MapPoint(self, point, sz):
-    #     file2bed_scalar = sz/self.span()
-    #     if self.I is not None:
-    #         x = point[0]+np.size(self.I,0)/2
-    #         y = point[1]+np.size(self.I,1)/2
-    #         a = self.I[round(x)-1][round(y)-1]
-    #         return [point[0]*file2bed_scalar, point[1]*file2bed_scalar, a]
-    #     else:
-    #         return [point[0]*file2bed_scalar, point[1]*file2bed_scalar, 1]
+    def MapPoint(self, sz):
+        f2b = sz/self.span() #file to bed dimension scalar
+        for point in self.path:
+            print(np.asarray((np.shape(self.I)))/2)
+            point += np.shape(self.I)/2
+            # point[0] = (point[0]+np.size(self.I,0)/2)*f2b
+            # point[1] = (point[1]+np.size(self.I,1)/2)*f2b
+
+            point.append(a = self.I[round(point[0])-1][round(point[1])-1])
 
     def populatePath(self):
         self.path = []
@@ -224,55 +213,60 @@ class ToolImage:
     def pol2cart(self, pol):
         return np.array([pol[0] * np.cos(pol[1]), pol[0] * np.sin(pol[1])])
 
+# def setkeypoints():
+#     keypoints = []
+    # Line
+    # x = 5
+    # for y in np.linspace(3,-3,10):
+    #     keypoints.append([x,y])
+    #     x *= -1
 
-def MasterPath(G, polyline, sz, I):
-    for line in polyline:
-        for point in line:
-            p = np.array(point) * sz/I.span()
-            # a = I.I[round(p[0])-1][round(p[1])-1]
-            G.move_global(p, .5)
-            G.setlaser(100)
-        G.setlaser(0)
+    # Circle
+    # r = 3
+    # for theta in range(360):
+    #         rad = math.radians(theta)
+    #         keypoints.append([r*math.sin(rad), r*math.cos(rad)])
+    # return keypoints
 
-def draw_hpgl(G, T, speed_draw, speed_jump, power):
+def DrawToolpath(G, P, speed, power):
     """
     Commands the gantry to draw the hpgl file located at [filename]
 
     Args:
         G (Gantry): the gantry object
-        T (Toolfile): tool file containing the hpgl code
+        P (Toolpath): tool file containing the hpgl code
         speed_draw (float): speed of gantry while drawing in in/sec
         speed_jump (float): speed of gantry while jumping between 
                             polylines in in/sec
     """
-    # get list of polylines
-    polylines = T.get_polylines_from_hpgl(500)
-
-    # # debug
-    # print(polylines)
-
-    # draw each polyline
-    for polyline in polylines:
-        # move to first point
-        G.move_global(polyline[0], speed_jump)
-        # turn laser on
-        G.setlaser(power)
-        # move to rest of points in sequence
-        for point in polyline[1:]:
-            G.move_global(point, speed_draw)
-        # turn off laser
+    if P.type == 'image':
+        print('Printing Image Toolpath...')
+    elif P.type == 'vector':
+        print('Printing Vector Toolpath...')
+    else:
+        pass
+    
+    # Split up Path into lines 
+    for line in P.polyline:
+        G.move_global(line[0], speed)
+        
+        for point in line:
+        #     p = np.array(point) * sz/I.span()
+        #     # a = I.I[round(p[0])-1][round(p[1])-1]
+            G.setlaser(power)
+            G.move_global(point, .5)
+        #     G.setlaser(100)
         G.setlaser(0)
-    # move back to homepoint
-    G.move_global([0,0], speed_jump)
+    G.move_global([0,0],2)
 
 if __name__ == "__main__":
     G = Gantry()
-    T = ToolImage('totoro.jpg', res=800) # Import totoro.jpg, populate with n points
-    # T = ToolVector('addendum.hpgl')
+    # T = ToolImage('totoro.jpg', res=800) # Import totoro.jpg, populate with n points
+    # T = ToolVector('max_tshirt_line.hpgl')
     # T = ToolVector('shapes.hpgl')
     
     # T = ToolFile('mini_square.hpgl')
-    # T = ToolFile('square.jpg', 500)
+    T = ToolImage('square.jpg', 100)
 
     just_laser = 0
 
@@ -280,12 +274,6 @@ if __name__ == "__main__":
         G.setlaser(100)
         while 1:
             pass
-    # else:
-        # for Line in M:
-        #     G.move_global(Line[0], 3)
-
-        #     G.setlaser(100)
-        #     for point in Line[1:]:
-        #         G.move_global(point, 2)
-        #         print(point)
-        #     G.setlaser(0)
+    else:
+        print(T.polyline[0])
+        # DrawToolpath(G, T, 1, 10)
