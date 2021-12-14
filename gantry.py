@@ -246,15 +246,13 @@ def DrawToolpath(G, P, speed, power):
     
     # Split up Path into lines 
     for line in P.polyline:
-        G.move_global(line[0], speed)
+        G.move_global(line[0], 2)
         
         for point in line:
-        #     p = np.array(point) * sz/I.span()
-        #     # a = I.I[round(p[0])-1][round(p[1])-1]
-            print(point)
-            G.setlaser(point[2])
-            G.move_global([point[0], point[1]], 1)
-        #     G.setlaser(100)
+            G.setlaser(power)
+            # s.amp = point[2]
+            speed = 1.1-point[2]
+            G.move_global(point[0:2], speed)
         G.setlaser(0)
     G.move_global([0,0],2)
 
